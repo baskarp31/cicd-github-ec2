@@ -1,6 +1,5 @@
 name: Push-to-EC2 instance
 
-# Trigger deployment only on push to main branch 
 on:
   push:
     branches:
@@ -8,40 +7,32 @@ on:
 
 jobs:
   deploy:
-    name: Push to EC2
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v1
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Deploy to my EC2 instance
-        uses: easingthemes/ssh-deploy@v2.1.5
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SOURCE: "./"
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          TARGET: ${{ secrets.TARGET_DIR }}
-
-      - name: Executing remote ssh commands using ssh key
-        uses: appleboy/ssh-action@master
+      - name: Deploy & Build on EC2
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST_DNS }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo yum -y update
-            sudo yum install -y httpd
-            sudo systemctl start httpd
+            set -e
+
+            sudo yum update -y
+            sudo yum install -y httpd nodejs npm rsync
             sudo systemctl enable httpd
-            cd /home
-            ls
-            cd ec2-user
-            sudo yum install nodejs npm -y
+            sudo systemctl start httpd
+
+            rsync -av --delete $GITHUB_WORKSPACE/ /home/ec2-user/app/
+
+            cd /home/ec2-user/app
             npm install
-            sudo npm run build
-            cd build
-            sudo mv * /var/www/html
+            npm run build
+
+            sudo rm -rf /var/www/html/*
+            sudo cp -r build/* /var/www/html/
             sudo systemctl restart httpd
-            
